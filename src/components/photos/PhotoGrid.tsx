@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { PhotoCard } from './PhotoCard';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Photo } from '../../types';
-import { Filter, Grid, List } from 'lucide-react';
+import { PhotoCard } from './PhotoCard';
+import { Search, Filter, X, SlidersHorizontal } from 'lucide-react';
 
 interface PhotoGridProps {
   photos: Photo[];
@@ -10,114 +10,203 @@ interface PhotoGridProps {
   showFilters?: boolean;
 }
 
-export const PhotoGrid: React.FC<PhotoGridProps> = ({ 
-  photos, 
+export const PhotoGrid: React.FC<PhotoGridProps> = ({
+  photos,
   onPhotoSelect,
   selectedPhotos = [],
-  showFilters = true
+  showFilters = false
 }) => {
-  const [filter, setFilter] = useState<'all' | 'flagged' | 'duplicates' | 'lowQuality'>('all');
-  const [damageFilter, setDamageFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [damageTypeFilter, setDamageTypeFilter] = useState<string>('all');
+  const [qualityFilter, setQualityFilter] = useState<string>('all');
+  const [duplicateFilter, setDuplicateFilter] = useState<string>('all');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
 
-  const filteredPhotos = photos.filter(photo => {
-    if (filter === 'flagged' && !photo.isDuplicate && photo.qualityScore >= 70) return false;
-    if (filter === 'duplicates' && !photo.isDuplicate) return false;
-    if (filter === 'lowQuality' && photo.qualityScore >= 70) return false;
-    if (damageFilter !== 'all' && photo.damageType !== damageFilter) return false;
-    return true;
-  });
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
 
-  const damageTypes = ['all', 'water', 'fire', 'structural', 'electrical', 'wind', 'other'];
+  const handleClearFilters = useCallback(() => {
+    setSearchTerm('');
+    setDamageTypeFilter('all');
+    setQualityFilter('all');
+    setDuplicateFilter('all');
+  }, []);
 
-  const isSelected = (photo: Photo) => selectedPhotos.some(p => p.id === photo.id);
+  const filteredPhotos = useMemo(() => {
+    return photos.filter(photo => {
+      // Apply search filter
+      if (searchTerm && !photo.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !photo.aiTags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) &&
+          !photo.damageType.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !(photo.locationTag && photo.locationTag.toLowerCase().includes(searchTerm.toLowerCase()))) {
+        return false;
+      }
+      
+      // Apply damage type filter
+      if (damageTypeFilter !== 'all' && photo.damageType !== damageTypeFilter) {
+        return false;
+      }
+      
+      // Apply quality filter
+      if (qualityFilter === 'high' && photo.qualityScore < 80) {
+        return false;
+      } else if (qualityFilter === 'medium' && (photo.qualityScore < 60 || photo.qualityScore >= 80)) {
+        return false;
+      } else if (qualityFilter === 'low' && photo.qualityScore >= 60) {
+        return false;
+      }
+      
+      // Apply duplicate filter
+      if (duplicateFilter === 'duplicates' && !photo.isDuplicate) {
+        return false;
+      } else if (duplicateFilter === 'unique' && photo.isDuplicate) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [photos, searchTerm, damageTypeFilter, qualityFilter, duplicateFilter]);
+
+  const isPhotoSelected = useCallback((photo: Photo) => {
+    return selectedPhotos.some(p => p.id === photo.id);
+  }, [selectedPhotos]);
 
   return (
-    <div className="space-y-6">
-      {/* Filters */}
+    <div className="space-y-4">
       {showFilters && (
-        <div className="bg-surface rounded-lg p-4 shadow-card">
+        <>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-            <div className="flex items-center space-x-4">
-              <Filter className="w-5 h-5 text-text-secondary" />
-              <select 
-                value={filter} 
-                onChange={(e) => setFilter(e.target.value as any)}
-                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-              >
-                <option value="all">All Photos ({photos.length})</option>
-                <option value="flagged">Flagged ({photos.filter(p => p.isDuplicate || p.qualityScore < 70).length})</option>
-                <option value="duplicates">Duplicates ({photos.filter(p => p.isDuplicate).length})</option>
-                <option value="lowQuality">Low Quality ({photos.filter(p => p.qualityScore < 70).length})</option>
-              </select>
-              
-              <select 
-                value={damageFilter} 
-                onChange={(e) => setDamageFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-              >
-                {damageTypes.map(type => (
-                  <option key={type} value={type}>
-                    {type === 'all' ? 'All Damage Types' : `${type.charAt(0).toUpperCase() + type.slice(1)} Damage`}
-                  </option>
-                ))}
-              </select>
+            <div className="relative">
+              <Search className="w-5 h-5 text-text-secondary absolute left-3 top-1/2 transform -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search photos..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent w-full sm:w-64"
+              />
             </div>
-
+            
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-gray-100'}`}
+                onClick={() => setShowFilterPanel(!showFilterPanel)}
+                className={`flex items-center px-3 py-2 rounded-md transition-colors ${
+                  showFilterPanel || damageTypeFilter !== 'all' || qualityFilter !== 'all' || duplicateFilter !== 'all'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-gray-100 text-text-primary hover:bg-gray-200'
+                }`}
               >
-                <Grid className="w-5 h-5" />
+                <SlidersHorizontal className="w-5 h-5 mr-2" />
+                Filters
+                {(damageTypeFilter !== 'all' || qualityFilter !== 'all' || duplicateFilter !== 'all') && (
+                  <span className="ml-2 bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                    {(damageTypeFilter !== 'all' ? 1 : 0) + 
+                     (qualityFilter !== 'all' ? 1 : 0) + 
+                     (duplicateFilter !== 'all' ? 1 : 0)}
+                  </span>
+                )}
               </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-gray-100'}`}
-              >
-                <List className="w-5 h-5" />
-              </button>
+              
+              {(searchTerm || damageTypeFilter !== 'all' || qualityFilter !== 'all' || duplicateFilter !== 'all') && (
+                <button
+                  onClick={handleClearFilters}
+                  className="flex items-center px-3 py-2 text-text-secondary hover:text-text-primary"
+                >
+                  <X className="w-5 h-5 mr-1" />
+                  Clear
+                </button>
+              )}
             </div>
           </div>
+          
+          {showFilterPanel && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Damage Type
+                </label>
+                <select
+                  value={damageTypeFilter}
+                  onChange={(e) => setDamageTypeFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">All Types</option>
+                  <option value="water">Water Damage</option>
+                  <option value="fire">Fire Damage</option>
+                  <option value="structural">Structural Damage</option>
+                  <option value="electrical">Electrical Damage</option>
+                  <option value="wind">Wind Damage</option>
+                  <option value="other">Other Damage</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Image Quality
+                </label>
+                <select
+                  value={qualityFilter}
+                  onChange={(e) => setQualityFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">All Qualities</option>
+                  <option value="high">High Quality (80%+)</option>
+                  <option value="medium">Medium Quality (60-79%)</option>
+                  <option value="low">Low Quality (&lt;60%)</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Duplicates
+                </label>
+                <select
+                  value={duplicateFilter}
+                  onChange={(e) => setDuplicateFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">Show All</option>
+                  <option value="unique">Unique Only</option>
+                  <option value="duplicates">Duplicates Only</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      
+      {filteredPhotos.length === 0 ? (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+          <Filter className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-text-primary mb-2">No Photos Found</h3>
+          <p className="text-text-secondary mb-4">
+            No photos match your current filters.
+          </p>
+          <button
+            onClick={handleClearFilters}
+            className="px-4 py-2 bg-gray-100 text-text-primary rounded-md hover:bg-gray-200 transition-colors"
+          >
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredPhotos.map(photo => (
+            <PhotoCard
+              key={photo.id}
+              photo={photo}
+              onClick={onPhotoSelect ? () => onPhotoSelect(photo) : undefined}
+              isSelected={isPhotoSelected(photo)}
+            />
+          ))}
         </div>
       )}
-
-      {/* Results count */}
+      
       <div className="text-sm text-text-secondary">
         Showing {filteredPhotos.length} of {photos.length} photos
       </div>
-
-      {/* Photo Grid */}
-      <div className={
-        viewMode === 'grid' 
-          ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" 
-          : "space-y-4"
-      }>
-        {filteredPhotos.map((photo) => (
-          <PhotoCard
-            key={photo.id}
-            photo={photo}
-            variant="withTag"
-            onSelect={onPhotoSelect}
-            isSelected={isSelected(photo)}
-          />
-        ))}
-      </div>
-
-      {filteredPhotos.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-text-secondary text-lg">No photos match the current filters</div>
-          <button 
-            onClick={() => {
-              setFilter('all');
-              setDamageFilter('all');
-            }}
-            className="mt-2 text-primary hover:underline"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
     </div>
   );
 };
+
