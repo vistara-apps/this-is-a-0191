@@ -3,10 +3,10 @@ import { LucideIcon } from 'lucide-react';
 
 interface StatsCardProps {
   title: string;
-  value: string | number;
+  value: number | string;
   subtitle?: string;
   icon: LucideIcon;
-  color?: 'primary' | 'success' | 'warning' | 'danger';
+  color: 'primary' | 'success' | 'warning' | 'danger';
 }
 
 export const StatsCard: React.FC<StatsCardProps> = ({
@@ -14,23 +14,23 @@ export const StatsCard: React.FC<StatsCardProps> = ({
   value,
   subtitle,
   icon: Icon,
-  color = 'primary'
+  color
 }) => {
   const colorClasses = {
-    primary: 'text-primary bg-primary/10',
-    success: 'text-green-600 bg-green-100',
-    warning: 'text-yellow-600 bg-yellow-100',
-    danger: 'text-red-600 bg-red-100'
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-green-100 text-green-700',
+    warning: 'bg-amber-100 text-amber-700',
+    danger: 'bg-red-100 text-red-700'
   };
 
   return (
-    <div className="bg-surface rounded-lg shadow-card p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
+    <div className="bg-surface rounded-lg shadow-card p-6">
+      <div className="flex items-start justify-between">
+        <div>
           <p className="text-text-secondary text-sm font-medium">{title}</p>
-          <p className="text-2xl font-bold text-text-primary">{value}</p>
+          <p className="mt-2 text-3xl font-bold text-text-primary">{value}</p>
           {subtitle && (
-            <p className="text-text-secondary text-sm">{subtitle}</p>
+            <p className="mt-1 text-sm text-text-secondary">{subtitle}</p>
           )}
         </div>
         <div className={`p-3 rounded-full ${colorClasses[color]}`}>
@@ -40,3 +40,4 @@ export const StatsCard: React.FC<StatsCardProps> = ({
     </div>
   );
 };
+

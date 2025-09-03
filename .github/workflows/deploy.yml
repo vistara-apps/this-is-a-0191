@@ -19,16 +19,26 @@ jobs:
         node-version: '22'
         cache: 'npm'
         
-        - name: Install dependencies
+    - name: Install dependencies
       run: npm install
 
     - name: Build application
       run: npm run build
       env:
         NODE_OPTIONS: --max-old-space-size=4096
+    
+    - name: Check for Vercel secrets
+      id: vercel_check
+      run: |
+        if [[ -n "${{ secrets.VERCEL_TOKEN }}" && -n "${{ secrets.VERCEL_ORG_ID }}" && -n "${{ secrets.VERCEL_PROJECT_ID }}" ]]; then
+          echo "has_vercel_secrets=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_vercel_secrets=false" >> $GITHUB_OUTPUT
+          echo "::warning::Vercel deployment skipped - missing required secrets (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID)"
+        fi
         
     - name: Deploy to Vercel (Production)
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && steps.vercel_check.outputs.has_vercel_secrets == 'true'
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -37,16 +47,17 @@ jobs:
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
         
     - name: Deploy to Vercel (Preview)
-      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
+      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' && steps.vercel_check.outputs.has_vercel_secrets == 'true'
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
         vercel-args: '--no-wait'
         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        github-comment: true
         
     - name: Comment PR with deployment URL
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && steps.vercel_check.outputs.has_vercel_secrets == 'true'
       uses: actions/github-script@v7
       with:
         script: |
@@ -66,3 +77,22 @@ jobs:
               \n\nThis preview will be automatically updated when you push new commits to this PR.`
             });
           }
+          
+    - name: Build Success Comment
+      if: github.event_name == 'pull_request' && steps.vercel_check.outputs.has_vercel_secrets == 'false'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `✅ **Build Successful!**
+            
+            The application built successfully but was not deployed to Vercel because the required secrets are not configured.
+            
+            To enable Vercel deployments, please configure the following repository secrets:
+            - VERCEL_TOKEN
+            - VERCEL_ORG_ID
+            - VERCEL_PROJECT_ID`
+          });
